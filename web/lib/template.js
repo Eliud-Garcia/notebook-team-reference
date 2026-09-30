@@ -1,0 +1,9 @@
+/**
+ * This Source Code Form is subject to the terms of the Mozilla Public License,
+ * v. 2.0. If a copy of the MPL was not distributed with this file, You can
+ * obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * Derivado de template_header.tex de codes2pdf (https://github.com/Erfaniaa/codes2pdf).
+ * GENERADO POR scripts/build-template.mjs — editar el .tex de la raíz y regenerar.
+ */
+export default "\\documentclass[10pt,a4paper,onesided]{article}\n\n\\usepackage{multicol}\n\\usepackage[utf8]{inputenc}\n\\usepackage[english]{babel}\n\\usepackage{listings}\n\\usepackage[usenames,dvipsnames]{color}\n\\usepackage{amsmath}\n\\usepackage{amssymb}\n\\usepackage{enumitem}\n\\usepackage{verbatim}\n\\usepackage{hyperref}\n\\usepackage{color}\n\\usepackage{geometry}\n\n\\geometry{verbose,${orientation},a4paper,tmargin=2cm,bmargin=2cm,lmargin=1cm,rmargin=1cm}\n\n\\usepackage{listings}\n\\usepackage{color}\n\n\\definecolor{dkgreen}{rgb}{0,0.6,0}\n\\definecolor{gray}{rgb}{0.5,0.5,0.5}\n\\definecolor{mauve}{rgb}{0.58,0,0.82}\n\n\\lstset{frame=tb,\n  language=C++,\n  aboveskip=1mm,\n  belowskip=1mm,\n  showstringspaces=false,\n  columns=flexible,\n  basicstyle={\\ttfamily},\n  numbers=${numbers},\n  numberstyle=\\tiny\\color{gray},\n  keywordstyle=\\color{blue},\n  commentstyle=\\color{dkgreen},\n  stringstyle=\\color{mauve},\n  breaklines=true,\n  breakatwhitespace=false,\n  tabsize=${tabsize}\n}\n\n\\setlength{\\columnsep}{${columnsep}}\n\\setlength{\\columnseprule}{1px}\n\n\\usepackage{fancyhdr}\n\\pagestyle{fancy}\n\\fancyhf{}\n\\renewcommand{\\headrulewidth}{0pt}\n\\fancyhead[R]{\\thepage}\n\\fancyhead[L]{${initials}}\n\n\\begin{document}\n\n${fontsizecmd}\n\n\\title{${title}}\n\\author{${author}}\n${date}\n\\maketitle\n\n${tocblock}\n\\begin{multicols}{${columns}}\n\\lstloadlanguages{C++,Java}\n\n"
