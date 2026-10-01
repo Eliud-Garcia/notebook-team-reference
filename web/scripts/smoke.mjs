@@ -44,6 +44,61 @@ assert(
   `solo esa carpeta → ${headings.join(', ')}`
 )
 
+// --- 2b) pestaña Archivos: listado y exclusión
+await page.click('button.tab:has-text("Archivos")')
+await page.waitForSelector('.filelist li.fitem')
+assert(await page.locator('.filelist li.fitem').count() === 4, `listado: 4 archivos (hay ${await page.locator('.filelist li.fitem').count()})`)
+assert(await page.locator('.filelist li.branch').count() === 2, `listado: 2 carpetas (hay ${await page.locator('.filelist li.branch').count()})`)
+assert((await page.textContent('.filetools .count')).includes('4 de 4 archivos'), 'contador: 4 de 4')
+
+const firstName = (await page.locator('.filelist li.fitem .fname').first().textContent()).trim()
+const firstTitle = firstName.split('.')[0]
+
+await page.locator('.filelist li.fitem input[type=checkbox]').first().uncheck()
+await page.waitForTimeout(300)
+assert((await page.textContent('.filetools .count')).includes('3 de 4 archivos'), `excluir ${firstName} → contador 3 de 4`)
+assert((await page.textContent('.status')).includes('restaurar 1'), 'la línea de estado ofrece restaurar')
+
+await page.click('button.tab:has-text("Vista previa")')
+await page.waitForTimeout(300)
+assert(await page.locator('.notebook pre.code').count() === 3, `vista previa sin el excluido (hay ${await page.locator('.notebook pre.code').count()})`)
+
+await page.click('button.tab:has-text("Código LaTeX")')
+await page.waitForTimeout(400)
+const texEx = await page.textContent('.texbox pre')
+assert(!texEx.includes(`\\subsubsection{${firstTitle}}`), `LaTeX: desaparece ${firstTitle}`)
+assert(texEx.includes('\\subsubsection{factorial}'), 'LaTeX: el resto sigue')
+
+await page.click('button.tab:has-text("Archivos")')
+await page.locator('.filelist li.fitem input[type=checkbox]').first().check()
+await page.waitForTimeout(300)
+assert((await page.textContent('.filetools .count')).includes('4 de 4 archivos'), 'volver a incluir → 4 de 4')
+assert(await page.locator('.notebook pre.code').count() === 4, `vista previa restaurada (hay ${await page.locator('.notebook pre.code').count()})`)
+
+await page.locator('.filelist li.branch > .check input[type=checkbox]').last().uncheck()
+await page.waitForTimeout(300)
+assert((await page.textContent('.filetools .count')).includes('0 de 4 archivos'), 'casilla de carpeta: excluye el subárbol → 0 de 4')
+await page.locator('.filelist li.branch > .check input[type=checkbox]').last().check()
+await page.waitForTimeout(300)
+assert((await page.textContent('.filetools .count')).includes('4 de 4 archivos'), 'casilla de carpeta: restaura → 4 de 4')
+
+await page.fill('[aria-label="Filtrar archivos"]', 'fact')
+await page.waitForTimeout(250)
+assert(await page.locator('.filelist li.fitem').count() === 1, `filtro "fact" → 1 archivo (hay ${await page.locator('.filelist li.fitem').count()})`)
+await page.fill('[aria-label="Filtrar archivos"]', '')
+await page.waitForTimeout(200)
+
+await page.click('button:has-text("Excluir todos")')
+await page.waitForTimeout(300)
+assert((await page.textContent('.filetools .count')).includes('0 de 4 archivos'), 'excluir todos → 0 de 4')
+assert(await page.locator('.notebook pre.code').count() === 0, 'sin archivos no queda ningún listado')
+await page.click('button:has-text("Incluir todos")')
+await page.waitForTimeout(300)
+assert((await page.textContent('.filetools .count')).includes('4 de 4 archivos'), 'incluir todos → 4 de 4')
+assert(await page.locator('.notebook pre.code').count() === 4, `vista previa completa (hay ${await page.locator('.notebook pre.code').count()})`)
+await page.click('button.tab:has-text("Vista previa")')
+await page.waitForTimeout(200)
+
 // --- 3) opciones de diseño
 await page.getByLabel('Columnas', { exact: true }).selectOption('2')
 await page.getByLabel('Tamaño de letra (pt)').selectOption('7')

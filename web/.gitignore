@@ -2,4 +2,9 @@ node_modules/
 .next/
 .vercel/
 out/
+#quitar los logs
+.log
+server.log
+server.log.*
+server3002.log
 npm-debug.log*

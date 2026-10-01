@@ -86,6 +86,81 @@ function Check ({ label, checked, onChange }) {
   )
 }
 
+function formatSize (bytes) {
+  if (!Number.isFinite(bytes)) return ''
+  if (bytes < 1024) return `${bytes} B`
+  const kb = bytes / 1024
+  return `${kb < 10 ? kb.toFixed(1) : Math.round(kb)} KB`
+}
+
+function collectPaths (node, out = []) {
+  for (const file of node.files) out.push(file.path)
+  for (const dir of node.dirs) collectPaths(dir, out)
+  return out
+}
+
+function hasMatch (node, query) {
+  if (node.files.some(f => f.path.toLowerCase().includes(query))) return true
+  return node.dirs.some(dir => hasMatch(dir, query))
+}
+
+function FolderCheck ({ node, excluded, onToggleMany }) {
+  const paths = collectPaths(node)
+  const kept = paths.reduce((n, p) => (excluded.has(p) ? n : n + 1), 0)
+  const all = kept === paths.length
+
+  return (
+    <label className="check">
+      <input
+        type="checkbox"
+        checked={all}
+        ref={el => { if (el) el.indeterminate = kept > 0 && !all }}
+        onChange={e => onToggleMany(paths, e.target.checked)}
+      />
+      <span className="fname">{node.name}/</span>
+    </label>
+  )
+}
+
+function FilesTree ({ node, sizes, excluded, onToggle, onToggleMany, query }) {
+  const rows = []
+
+  for (const entry of node.entries) {
+    if (entry.type === 'dir') {
+      if (query && !hasMatch(entry.node, query)) continue
+      rows.push(
+        <li key={entry.path} className="branch">
+          <FolderCheck node={entry.node} excluded={excluded} onToggleMany={onToggleMany} />
+          <FilesTree
+            node={entry.node}
+            sizes={sizes}
+            excluded={excluded}
+            onToggle={onToggle}
+            onToggleMany={onToggleMany}
+            query={query}
+          />
+        </li>
+      )
+      continue
+    }
+
+    if (query && !entry.path.toLowerCase().includes(query)) continue
+    const off = excluded.has(entry.path)
+    rows.push(
+      <li key={entry.path} className={`fitem${off ? ' off' : ''}`}>
+        <label className="check">
+          <input type="checkbox" checked={!off} onChange={e => onToggle(entry.path, e.target.checked)} />
+          <span className="fname">{entry.name}</span>
+          <span className="size">{formatSize(sizes.get(entry.path))}</span>
+        </label>
+      </li>
+    )
+  }
+
+  if (!rows.length) return null
+  return <ul>{rows}</ul>
+}
+
 async function downloadContents (repo, onProgress) {
   const queue = [...repo.files]
   const out = new Map()
@@ -124,16 +199,60 @@ export default function Home () {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [excluded, setExcluded] = useState(() => new Set())
+  const [fileFilter, setFileFilter] = useState('')
 
   const runId = useRef(0)
 
   const set = (key, value) => setOpts(prev => ({ ...prev, [key]: value }))
 
-  const tree = useMemo(() => (repo ? buildTree(repo.files.map(f => f.path)) : null), [repo])
+  const fullTree = useMemo(() => (repo ? buildTree(repo.files.map(f => f.path)) : null), [repo])
+  const tree = useMemo(() => {
+    if (!repo) return null
+    if (!excluded.size) return fullTree
+    return buildTree(repo.files.filter(f => !excluded.has(f.path)).map(f => f.path))
+  }, [repo, fullTree, excluded])
+
+  const sizes = useMemo(() => new Map(repo ? repo.files.map(f => [f.path, f.size]) : []), [repo])
+  const allPaths = useMemo(() => (repo ? repo.files.map(f => f.path) : []), [repo])
+
+  // Los archivos excluidos no se listan ni se incrustan (tampoco si otro .tex los \input).
+  const visibleContents = useMemo(() => {
+    if (!contents) return null
+    if (!excluded.size) return contents
+    const out = new Map()
+    for (const [path, body] of contents) {
+      if (!excluded.has(path)) out.set(path, body)
+    }
+    return out
+  }, [contents, excluded])
+
+  const excludedCount = allPaths.reduce((n, p) => (excluded.has(p) ? n + 1 : n), 0)
+
   const tex = useMemo(() => {
-    if (!tree || !contents || tab !== 'latex') return ''
-    return buildTex({ tree, contents, opts })
-  }, [tree, contents, tab, opts])
+    if (!tree || !visibleContents || tab !== 'latex') return ''
+    return buildTex({ tree, contents: visibleContents, opts })
+  }, [tree, visibleContents, tab, opts])
+
+  function toggleFile (path, on) {
+    setExcluded(prev => {
+      const next = new Set(prev)
+      if (on) next.delete(path)
+      else next.add(path)
+      return next
+    })
+  }
+
+  function toggleMany (paths, on) {
+    setExcluded(prev => {
+      const next = new Set(prev)
+      for (const p of paths) {
+        if (on) next.delete(p)
+        else next.add(p)
+      }
+      return next
+    })
+  }
 
   async function onSubmit (event) {
     event.preventDefault()
@@ -144,6 +263,8 @@ export default function Home () {
     setRepo(null)
     setContents(null)
     setProgress(null)
+    setExcluded(new Set())
+    setFileFilter('')
 
     try {
       const data = await fetchRepoData(repoUrl, folder)
@@ -333,7 +454,18 @@ export default function Home () {
         <p className="status no-print">
           {repo.fullName} · rama <strong>{repo.ref}</strong>
           {repo.subpath && <> · carpeta <strong>{repo.subpath}</strong></>}
-          {' · '}{repo.total} archivos
+          {' · '}
+          {excludedCount
+            ? <><strong>{allPaths.length - excludedCount}</strong> de {allPaths.length} archivos</>
+            : <>{allPaths.length} archivos</>}
+          {excludedCount > 0 && (
+            <>
+              {' · '}
+              <button className="linkish" type="button" onClick={() => setExcluded(new Set())}>
+                restaurar {excludedCount}
+              </button>
+            </>
+          )}
           {repo.truncated && ' · ⚠ repositorio enorme: el listado está incompleto, indica una carpeta para acotarlo'}
         </p>
       )}
@@ -347,6 +479,9 @@ export default function Home () {
               </button>
               <button className={`tab ${tab === 'latex' ? 'active' : ''}`} onClick={() => setTab('latex')} type="button">
                 Código LaTeX
+              </button>
+              <button className={`tab ${tab === 'files' ? 'active' : ''}`} onClick={() => setTab('files')} type="button">
+                Archivos{excludedCount > 0 ? ` (${allPaths.length - excludedCount})` : ''}
               </button>
             </div>
             <button className="secondary" onClick={onCopy} type="button" disabled={tab !== 'latex'}>
@@ -384,13 +519,59 @@ export default function Home () {
               Copia esto y pégalo en Overleaf para compilar el PDF con <code>pdflatex</code>.
             </p>
           </div>
+
+          <div className={`panel ${tab === 'files' ? 'active' : ''} files no-print`}>
+            <div className="filebox">
+              <div className="filetools">
+                <input
+                  type="search"
+                  aria-label="Filtrar archivos"
+                  placeholder="Filtrar por nombre o ruta…"
+                  value={fileFilter}
+                  onChange={e => setFileFilter(e.target.value)}
+                />
+                <span className="count">
+                  {allPaths.length - excludedCount} de {allPaths.length} archivos
+                  {excludedCount > 0 && ` · ${excludedCount} excluidos`}
+                </span>
+                <button type="button" className="secondary" onClick={() => toggleMany(allPaths, true)}>
+                  Incluir todos
+                </button>
+                <button type="button" className="secondary" onClick={() => toggleMany(allPaths, false)}>
+                  Excluir todos
+                </button>
+              </div>
+
+              {fullTree && fileFilter.trim() && !hasMatch(fullTree, fileFilter.trim().toLowerCase()) ? (
+                <p className="status">Ningún archivo coincide con “{fileFilter.trim()}”.</p>
+              ) : (
+                <div className="filelist">
+                  <FilesTree
+                    node={fullTree}
+                    sizes={sizes}
+                    excluded={excluded}
+                    onToggle={toggleFile}
+                    onToggleMany={toggleMany}
+                    query={fileFilter.trim().toLowerCase()}
+                  />
+                </div>
+              )}
+
+              <p className="status">
+                Desmarca los archivos que no quieras: la vista previa, el índice y el LaTeX se
+                actualizan al instante. Al regenerar el notebook vuelve a incluirse todo.
+              </p>
+            </div>
+          </div>
         </>
       )}
 
       {!ready && !error && !progress && (
         <p className="status no-print">
           Se toman los archivos de código del repo, se arman con índice, resaltado de sintaxis y las
-          opciones de diseño que elijas. Luego puedes guardarlo como PDF o copiar el LaTeX.
+          opciones de diseño que elijas. En la pestaña <strong>Archivos</strong> ves el listado de lo
+          que se trajo del repositorio y puedes excluir los que no quieras. Luego puedes guardarlo
+          como PDF o copiar el LaTeX.
         </p>
       )}
     </main>
