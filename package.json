@@ -6,6 +6,11 @@
   "scripts": {
     "test": "standard"
   },
+  "standard": {
+    "ignore": [
+      "web/"
+    ]
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Erfaniaa/codes2pdf.git"
